@@ -2,7 +2,7 @@
 
 # Navin Lab Cold Spring Harbor Workshops
 
-This repository holds the workshops for the Summer 2024 Single Cell Analysis CSHL Course. Visit the wiki page for workshops and how the environments were set up for teaching!
+This repository holds the workshops for the Summer 2024 Single Cell Analysis CSHL Course. Visit the [wiki page](https://github.com/navinlabcode/CSHL_workshops/wiki) for workshops and how the environments were set up for teaching!
 
 Thanks have fun! 😎
 
