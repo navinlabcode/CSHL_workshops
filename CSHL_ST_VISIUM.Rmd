@@ -1,0 +1,712 @@
+---
+title: "CSHL Summer 2024"
+author: "Navin Lab: Ping Xu & Siyuan He"
+date: "2024 July"
+output:
+  rmdformats::readthedown:
+    df_print: paged
+    highlight: tango
+---
+
+# Welcome to the Spatial Transcriptomics Workshop!
+
+In this session, we will focus on Spatial Transcriptomics data generated from the 10X Visium platform.
+
+The data for this part (DCIS data from 10X Visium and scRNA data from 10X 3' chemistry) is published by Wei, Runmin, et al.<br> For more details about this publication, you can refer to [Nature Biotechnology (2022)](https://www.nature.com/articles/s41587-022-01233-1).
+
+## Workshop Goals
+
+1. Become familiar with the ST data format and the major processing steps, including filtering, dimensionality reduction, clustering, and visualization.
+2. Explore different methods to understand the spatial heterogeneity of cancer cells and the tumor microenvironment (TME) in DCIS.
+
+## Main Sections
+
+1. **Introduction to DCIS and the 10X Visium Platform**
+2. **Quality Control Metrics for ST Data**
+   - nCount_Spatial
+   - nFeature_Spatial
+   - log10GenesPerUMI
+   - mitoRatio
+   - Filtering out low-quality spots
+3. **Data Processing and Visualization**
+   - Spatial coordinates
+   - H&E image
+   - Spatially Visualize nFeature_Spatial & nCount_Spatial
+   - Dimensionality reduction and Clustering
+   - Find marker genes
+   - Visualization
+4. **Deconvolution**
+   - Introduction
+   - Data preparation
+   - "doublet" mode in RCTD
+   - "full" mode in RCTD
+5. **Seurat Label Transfer**
+6. **CellTrek Analysis**
+   - Single cell projection
+   - Visualize celltrek results
+   - Spatial proximity analysis
+   - Visualize scoloc_vis results
+
+## Background
+
+### 10X Visium
+**10X Visium** is a technology developed by 10x Genomics for spatial gene expression profiling. It allows researchers to measure gene expression across tissue sections while preserving the spatial context of the tissue architecture.
+
+<img src="https://github.com/navinlabcode/CSHL_workshops/assets/103017252/58bb91c3-fab3-4f30-adca-739e53ad7a4a" width="80%">
+<br> For more details about this method, you can refer to [Visium Spatial Gene Expression](https://www.10xgenomics.com/products/spatial-gene-expression).
+
+### DCIS
+**Ductal Carcinoma In Situ (DCIS)**, also known as intraductal carcinoma or stage 0 breast cancer, is a non-invasive or pre-invasive breast cancer. This means that while the cells lining the ducts have transformed into cancer cells, they have not yet spread through the duct walls into the surrounding breast tissue. There is a gap in knowledge regarding how different cancer cells are spatially organized and how they interact with the tumor microenvironment (TME).
+
+<img src="https://github.com/navinlabcode/CSHL_workshops/assets/103017252/5e7f5c53-66cf-48ea-9203-c16867e65b39" width="40%">
+
+<br> For more information, you can refer to this [DCIS](https://www.cancer.gov/publications/dictionaries/cancer-terms/def/dcis).
+
+
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE,fig.height=5)
+library(klippy, lib.loc = "/volumes/USR1/pingxu/CSHL_course_2024_Summer/R_Pacakges/")
+```
+
+```{r , echo=FALSE, include=TRUE}
+klippy::klippy('')
+```
+
+
+```{r, include=FALSE}
+your_working_dir <- "/volumes/USR1/pingxu/CSHL_course_2024_Summer/"
+DCIS_SC_Path <- "/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/DCIS_SC.rds"
+DCIS_ST_Path <-"/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/DCIS_ST.rds"
+DCIS_traint_Path <- "/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/DCIS_traint.rds"
+DCIS_celltrek_Path <- "/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/DCIS_celltrek.rds"
+Processed_DCIS_ST_Path <- '/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/Processed_DCIS_ST.rds'
+RCTD_Path <- '/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/RCTD.rds'
+RCTD_full_Path <-'/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/RCTD_full.rds'
+
+```
+
+## Quality Control Metrics for ST Data
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Load necessary packages 
+suppressPackageStartupMessages({
+    library(hdf5r)
+    library(Seurat)
+    library(dplyr)
+    library(RColorBrewer)
+    library(CellTrek)
+    library(ggplot2)
+    library(spacexr)
+    library(paletteer)
+})
+# Check Seurat version
+packageVersion("Seurat")
+
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Set Working Directory
+setwd(your_working_dir)
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Load data
+# This is the scRNA-seq data (which has been processed and annotated)
+# DCIS_SC_Path and DCIS_ST_Path are obsolete paths for.rds files.
+DCIS_SC <- readRDS(file = DCIS_SC_Path) 
+# This is the ST data
+DCIS_ST <- readRDS(file = DCIS_ST_Path )
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check the object details
+DCIS_SC
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check the object details
+DCIS_ST
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check the metadata of the scRNA-seq object
+head(DCIS_SC@meta.data)
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check the metadata of the ST object
+head(DCIS_ST@meta.data)
+```
+
+
+<br />Three columns are shown in the metadata of the ST object.
+<br /> **orig.ident:** this often contains the sample identity if known, but will default to project as we had assigned it
+<br /> **nCount_Spatial:** number of UMIs per cell.
+UMIs, or Unique Molecular Identifiers, are short sequences of random nucleotides that are used in sequencing experiments to label individual molecules. They help in reducing biases and errors during the amplification process by allowing for the identification and removal of duplicates. This ensures a more accurate quantification of the original molecules present in a sample.
+<br /> **nFeature_Spatial:** number of genes detected per cell.
+<br />*We need to calculate some additional metrics for quality control (QC) checks.* <br />**number of genes detected per UMI:** this metric with give us an idea of the complexity of our dataset (more genes detected per UMI, more complex our data).
+<br />**mitochondrial ratio:** this metric will give us a percentage of cell reads originating from the mitochondrial genes.
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Add number of genes per UMI for each cell to metadata
+DCIS_ST$log10GenesPerUMI <- log10(DCIS_ST$nFeature_Spatial) / log10(DCIS_ST$nCount_Spatial)
+# Compute percent mito ratio
+DCIS_ST$mitoRatio <- PercentageFeatureSet(object = DCIS_ST, pattern = "^MT-")
+# Since we want the ratio value for plotting, we will reverse that step by then dividing by 100.
+DCIS_ST$mitoRatio <- DCIS_ST@meta.data$mitoRatio / 100
+```
+
+### nCount_Spatial
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
+# Visualize the number of transcripts per cell
+DCIS_ST@meta.data %>% 
+  ggplot(aes( x=nCount_Spatial, fill= 'orig.ident')) + 
+  geom_density(alpha = 0.2) + 
+  scale_x_log10() + 
+  theme_classic() +
+  ylab("Cell density") +
+  geom_vline(xintercept = 200)+NoLegend()
+```
+
+
+
+### nFeature_Spatial
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
+# Visualize the distribution of genes detected per cell
+DCIS_ST@meta.data  %>% 
+  ggplot(aes( x=nFeature_Spatial, fill= 'orig.ident')) + 
+  geom_density(alpha = 0.2) + 
+  scale_x_log10() + 
+  theme_classic() +
+  ylab("Cell density") +
+  geom_vline(xintercept = 200)+NoLegend()
+```
+
+### log10GenesPerUMI
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
+# Visualize the overall complexity of the gene expression by visualizing the genes detected per UMI
+DCIS_ST@meta.data %>%
+  ggplot(aes(x=log10GenesPerUMI, fill= 'orig.ident')) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  ylab("Cell density") +
+  geom_vline(xintercept = 0.80)+NoLegend()
+```
+
+### mitoRatio
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.height=4, fig.width=6}
+# Visualize the Mitochondrial counts ratio
+DCIS_ST@meta.data %>%
+  ggplot(aes(x=mitoRatio, fill= 'orig.ident')) +
+  geom_density(alpha = 0.2) +
+  theme_classic() +
+  ylab("Cell density") +
+  geom_vline(xintercept = 0.15)+NoLegend()
+```
+
+### Filtering out low-quality spots
+
+Now that we have visualized the various metrics, we can set thresholds to filter out low-quality cells. It's important to note that different tissues or experimental settings may require different quality control (QC) thresholds. Feel free to try different thresholds. For this analysis, we will apply the following thresholds:
+<br /> - **nCount_Spatial** > 200
+<br /> - **nFeature_Spatial** > 200
+<br /> - **log10GenesPerUMI** > 0.8
+<br /> - **mitoRatio** < 0.15
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Filter out low quality reads using selected thresholds
+DCIS_ST <- subset(x = DCIS_ST, 
+                         subset= (nCount_Spatial >= 200) & 
+                           (nFeature_Spatial >= 200) & 
+                           (log10GenesPerUMI > 0.80) & 
+                           (mitoRatio < 0.15))
+
+# Check the updated data		
+# After removing 34 spots, 1533 spots remain.
+DCIS_ST
+
+```
+
+## Data Processing and Visualization
+### Spatial Coordinates
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check the X y information in the ST object
+head(DCIS_ST@images$slice1@coordinates)
+```
+
+Each spot on the Visium slide captures mRNA from the tissue section, and these spots are organized in a grid with row and column indices. 
+<br /> **row**: The row index of the spot within the array.
+<br /> **col**: The column index of the spot within the array.
+<br /> **imagerow**: The row coordinate of the spot in the image space.
+<br /> **imagecol**: The column coordinate of the spot in the image space.
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=8, fig.height=3}
+# Plot the X y information in the ST object
+plot1 <- ggplot(DCIS_ST@images$slice1@coordinates, aes(x = col, y = row)) +
+  geom_point(size= 0.5) +
+  labs(title = "Spatial Spot Index") +
+  theme_minimal() +
+  coord_flip()
+plot2 <- ggplot(DCIS_ST@images$slice1@coordinates, aes(x = imagecol, y = imagerow)) +
+  geom_point(size= 0.5) +
+  labs(title = "Image Coordinate") +
+  theme_minimal() + 
+  scale_y_reverse()
+# Print the plot
+plot1 | plot2
+
+
+```
+
+### H&E image 
+This H&E image allows us to better understand the histological features of this tissue.
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Plot the H&E image
+SpatialFeaturePlot(DCIS_ST, features = NULL, pt.size.factor = 0, crop = F)+ NoLegend()
+```
+
+
+### Spatially Visualize nFeature_Spatial & nCount_Spatial
+The **nFeature_Spatial** and **nCount_Spatial** metrics are influenced by the cell density across the tissue. <br>We can compare these parameters with the **H&E image** above. 
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Visualize nCount_Spatial and nFeature_Spatial
+SpatialFeaturePlot(DCIS_ST, 
+                   features = c("nCount_Spatial",
+                                "nFeature_Spatial"),
+                   pt.size.factor = 1,
+                   crop = F) 
+```
+
+
+## Dimensionality reduction and Clustering
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=4, fig.height=3}
+# Normalization and runPCA
+DCIS_ST <- NormalizeData(DCIS_ST, assay='Spatial') %>% 
+  FindVariableFeatures() %>% 
+  ScaleData(features=rownames(DCIS_ST))
+
+DCIS_ST <- RunPCA(DCIS_ST, features=VariableFeatures(DCIS_ST),
+                  verbose = F)
+
+ElbowPlot(DCIS_ST, ndims = 50) 
+```
+
+The Elbow Plot helps to visualize the standard deviation of each principal component (PC). The 'elbow' point (where the curve bends) indicates the number of PCs that capture the most variation in the data. Based on the Elbow Plot, we choose the number of PCs to use for downstream analysis. In this case, we use the first 10 PCs.
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# RunUMAP
+DCIS_ST <- FindNeighbors(DCIS_ST, reduction='pca', dims = 1:10)
+DCIS_ST <- FindClusters(DCIS_ST, resolution = 0.5)
+DCIS_ST <- RunUMAP(DCIS_ST, dims = 1:10)
+
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=4, fig.height=3}
+# We can then visualize the results of the clustering in UMAP space. 
+plot1 <- DimPlot(DCIS_ST, label = T,reduction = "umap", 
+              cols=colorRampPalette(brewer.pal(12,"Paired"))(7))
+plot1
+
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=6, fig.height=3.5}
+# We can then visualize the results of the clustering in the spatial coordinate space. 
+plot2 <- SpatialDimPlot(DCIS_ST,label=T, label.size = 3, pt.size.factor = 1, crop = F) +
+  scale_fill_manual(values = colorRampPalette(brewer.pal(12,"Paired"))(7))
+# Print the plot
+plot2
+```
+
+### Find marker genes
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+DCIS_ST_markers <- FindAllMarkers(DCIS_ST, only.pos = T)
+DCIS_ST_top10 <- DCIS_ST_markers %>% 
+  group_by(cluster) %>% 
+  top_n(n=10,wt=avg_log2FC)
+# check the DCIS_ST_top10
+DCIS_ST_top10
+
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.width=7, fig.height=8.5}
+# visualize
+plot1 <- DoHeatmap(DCIS_ST,
+                   features = DCIS_ST_top10$gene, 
+                   group.colors = colorRampPalette(brewer.pal(12,"Paired"))(9))
+plot1
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check marker gene for Cluster 2
+# Clutser 2 expressed Plasma B cell (IGLC2, IGLC3) and Fibroblast cell (COL1A1, POSTN) markers. 
+DCIS_ST_top10[DCIS_ST_top10$cluster == '2',]$gene
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check marker gene for Cluster 3
+# Clutser 3 expressed Adipocyte (ADIPOQ, LEP, G0S2, LPL, PLIN1) markers. 
+DCIS_ST_top10[DCIS_ST_top10$cluster == '3',]$gene
+```
+
+
+### Visualization 
+#### Visualize Spatial cluster
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.height=4}
+
+plot1 <- SpatialDimPlot(DCIS_ST, pt.size.factor = 1, 
+               cells.highlight = WhichCells(DCIS_ST, idents =c( '2')),
+                cols.highlight = c("#00F5FF","grey50"),
+               crop = F)+ggtitle('Cluster 2 Highlighted' )+NoLegend()
+plot2 <-SpatialDimPlot(DCIS_ST, pt.size.factor = 1, 
+               cells.highlight = WhichCells(DCIS_ST, idents =c( '3')),
+                  cols.highlight = c("#C0FF3E","grey50"),
+               crop = F)+ggtitle('Cluster 3 Highlighted' )+NoLegend()
+plot1|plot2
+```
+
+
+#### Visualize nCount_Spatial and nFeature_Spatial in each cluster
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.height=4}
+plot1 <- VlnPlot(DCIS_ST, 
+                 features = c("nCount_Spatial", "nFeature_Spatial"),
+                 pt.size = 0, 
+        cols = colorRampPalette(brewer.pal(12,"Paired"))(7))
+plot1
+```
+
+
+Generally speaking, immune cells tend to have lower nCount and nFeature values compared to other cell types. This is because immune cells, such as T cells and B cells, often have fewer detected transcripts and genes. In contrast, cancer cells usually have higher nCount and nFeature values, reflecting their increased transcriptional activity.
+
+## Check scRNA-seq object
+### Annotation
+This dataset has already been preprocessed and includes annotation information.
+Based on Copykat inference, three subclones were identified, each exhibiting distinct CNVs (copy number variations).
+This heatmap is from Figure 4a of the original publication. For more details, please visit the [CellTrek publication](https://www.nature.com/articles/s41587-022-01233-1). For more information about Copykat, visit the [Copykat](https://github.com/navinlabcode/copykat).
+
+![](/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/VISIUM_ST/VISIUM_Plot/Subclone_heatmap.png)
+
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.width=6, fig.height=4}
+# Check scRNA data UMAP
+plot1 <- DimPlot(DCIS_SC, 
+                 label = T,
+                 repel = T,
+                 cols = colorRampPalette(brewer.pal(12,"Paired"))(8))
+plot1
+```
+
+## Deconvolution
+### Introduction
+For spatial data analysis, understanding the spatial distribution of cells is crucial. In the context of 10X Visium data, each spatial transcriptomics (ST) spot (55um) can contain multiple cells (approximately 1-15 cells, depending on the tissue density). This complexity implies that marker genes for each cluster may originate from different cell types or states, making it challenging to directly annotate cell types or states from each cluster. <br /> Deconvolution in the context of spatial transcriptomics (ST) refers to the process of computationally inferring the cellular composition within each spatially resolved spot or region on a spatial transcriptomics slide. Because each spot in ST data typically contains transcripts from multiple cell types, deconvolution is an option to unravel the contribution of different cell types to the observed gene expression profiles.
+
+#### Why Deconvolution is Important
+**Heterogeneity:** Spatial spots often capture mixed populations of cells, and deconvolution helps to disentangle this heterogeneity.
+<br /> **Cell Type Identification:** It allows researchers to identify which cell types are present in each spot and their relative proportions.
+<br /> **Biological Insights:** By understanding the spatial distribution of cell types, researchers can gain insights into tissue organization, microenvironments, and cellular interactions.
+
+#### Key Steps in Deconvolution
+
+**Reference Profile Generation:** Create or obtain single-cell RNA-seq (scRNA-seq) reference profiles that represent the pure expression profiles of different cell types.
+<br /> **Spot Profile Analysis:** Analyze the gene expression profiles of each spatial spot in the ST dataset.
+<br /> **Computational Deconvolution:** Use algorithms to infer the proportions of different cell types in each spot based on the reference profiles and the spot profiles.
+
+#### Methods for Deconvolution
+Several computational methods and tools are available for deconvolution of ST data. 
+In the following tutorial, we will use RCTD (Robust Cell Type Decomposition).
+<br /> For more information about this method, visit the [RCTD](https://www.nature.com/articles/s41587-021-00830-w).
+This are other methods for Deconvolution:[SPOTlight](https://github.com/MarcElosua/SPOTlight); [SpatialDDLS](https://github.com/diegommcc/SpatialDDLS?tab=readme-ov-file#spatialddls-); [cell2location](https://github.com/BayraktarLab/cell2location).
+
+### Data preparation
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Check the identities of the cells and the number of cells for each identity
+cell_counts <- table(Idents(DCIS_SC))
+cell_counts
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Subset the reference dataset to include only cell types with at least 25 cells
+valid_idents <- names(cell_counts[cell_counts >= 25])
+reference_SC <- subset(DCIS_SC, idents = valid_idents)
+# Verify the cell counts in the subsetted reference_SC
+table(Idents(reference_SC))
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Extract information from scRNA-seq dataset
+counts <- reference_SC@assays$RNA@counts
+cluster <- as.factor(reference_SC$cell_type)
+levels(cluster) <- gsub("/", "_", levels(cluster))
+# Drop unused levels from a factor 
+cluster <- droplevels(cluster)
+nUMI <- reference_SC$nCount_RNA
+# Create the RCTD reference object
+reference <- Reference(counts, cluster, nUMI)
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+counts_ST <- DCIS_ST@assays$Spatial@counts
+# Check counts_ST
+counts_ST[1:5,1:3]
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+coords <- DCIS_ST@images$slice1@coordinates[,c( 'row','col')]
+colnames(coords) <- c("x", "y")
+# Check coords
+head(coords)
+```
+
+### "doublet" mode in RCTD
+```{r, eval=FALSE, class.source='klippy', message=FALSE, warning=FALSE}
+# Set up query with the RCTD function SpatialRNA
+query <- SpatialRNA(coords, counts_ST, colSums(counts_ST))
+# Multiple cores can be specified for faster performance
+RCTD <- create.RCTD(query, reference, max_cores = 20)
+# If in doublet mode, fits at most two cell types per pixel.
+# It classifies each pixel as 'singlet' or 'doublet' and searches for the cell types on the pixel.
+# If in full mode, can fit any number of cell types on each pixel. 
+# In multi mode, cell types are added using a greedy algorithm, up to a fixed number.
+RCTD <- run.RCTD(RCTD, doublet_mode = "doublet")
+saveRDS(RCTD, file = RCTD_Path)
+```
+
+Option 2: We can load the saved rds file.
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+RCTD <- readRDS(file = RCTD_Path )
+results_df = RCTD@results$results_df
+results_df$spot_id = rownames(results_df)
+head(results_df)
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=6, fig.height=3.5}
+DCIS_ST$spot_id = rownames(DCIS_ST@meta.data)
+DCIS_ST@meta.data = left_join(DCIS_ST@meta.data,results_df, by= 'spot_id' )
+rownames(DCIS_ST@meta.data) = DCIS_ST@meta.data$spot_id
+# This updated DCIS_ST object is also saved as 'Processed_DCIS_ST.rds' and can be accessed later..
+# saveRDS(DCIS_ST, file = '/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/Processed_DCIS_ST.rds')
+# Set color vector
+ST_colors =c('#5050FFFF','#00FF00','#E762D7',
+            '#D58F5CFF','#FF0000','#5DB1DDFF','#CC33FF' )
+names(ST_colors) = c("Clone1","Clone2","Clone3","Fibroblast", "EndoVas","NK_T" , "Myeloid")
+
+# Next, plot the RCTD annotations. 
+# Because we ran RCTD in doublet mode, the algorithm assigns a first_type and second_type for each spot.
+Plot1 <- SpatialDimPlot(DCIS_ST, group.by = 'first_type', pt.size.factor = 1, crop = F, cols =  ST_colors)
+Plot1 
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=6, fig.height=3.5}
+Plot1 <- SpatialDimPlot(DCIS_ST, group.by = "second_type", pt.size.factor = 1, crop = F, cols =  ST_colors)
+Plot1 
+```
+
+### "full" mode in RCTD
+
+```{r, eval=FALSE, class.source='klippy', message=FALSE, warning=FALSE}
+# Set up a query with the RCTD function SpatialRNA, which is similar to the previous section.
+query <- SpatialRNA(coords, counts_ST, colSums(counts_ST))
+RCTD_full <- create.RCTD(query, reference, max_cores = 20)
+# Run full mode
+RCTD_full <- run.RCTD(RCTD_full, doublet_mode = "full")
+saveRDS(RCTD_full, file = RCTD_full_Path )
+```
+
+Option 2: We can load the saved rds file.
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+RCTD_full<- readRDS(file = RCTD_full_Path)
+#The results of RCTD full mode are stored in @results$weights. 
+# We next normalize the weights using normalize_weights so that they sum to one.
+# Each entry represents the estimated proportion of each cell type on each Visium spot
+weights <- RCTD_full@results$weights
+norm_weights <- data.frame(normalize_weights(weights))
+norm_weights$spot_id = rownames(norm_weights)
+head(norm_weights)
+```
+
+
+Add the output into the DCIS_ST object.
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=15, fig.height=6}
+DCIS_ST@meta.data = left_join(DCIS_ST@meta.data,norm_weights, by= 'spot_id')
+rownames(DCIS_ST@meta.data) = DCIS_ST@meta.data$spot_id
+# Save intermediate file for future use.
+saveRDS(DCIS_ST, file = Processed_DCIS_ST_Path)
+# Visualize the result from RCTD full mode
+SpatialFeaturePlot(DCIS_ST, 
+                   features = c("Clone1",
+                                "Clone2",
+                                'Clone3'),
+                   pt.size.factor = 1,
+                   crop = F) 
+```
+
+
+## Seurat label transfer
+Seurat's label transfer is a powerful method for integrating and annotating single-cell datasets. This technique enables the transfer of cell type labels from a well-annotated reference dataset to a new query dataset, facilitating accurate identification and characterization of cell types in the query dataset.
+
+**Here’s an overview of the process and its utility:**
+
+**Reference Dataset Preparation:** A reference dataset with known cell type labels is prepared. This dataset should be well-annotated and contain diverse cell types relevant to the query dataset.
+**Identification of Anchors:** The FindTransferAnchors function in Seurat identifies pairs of cells between the reference and query datasets that are similar to each other. These pairs are referred to as "anchors."
+<br /> This step uses canonical correlation analysis (CCA) or mutual nearest neighbors (MNN) to align the datasets and find the best matches.
+**Transfer of Labels:** The TransferData function uses these anchors to project the cell type labels from the reference dataset onto the query dataset. The function computes a score for each cell in the query dataset, indicating the likelihood of it belonging to each cell type in the reference dataset.
+**Visualization and Analysis:** The transferred labels can be visualized and further analyzed.
+<br /> For more information about Seurat label transfer, visit the [Seurat label transfer](https://satijalab.org/seurat/reference/transferdata).
+
+```{r,class.source='klippy', message=FALSE, warning=FALSE}
+
+# Remove the added metadata from RCTD
+DCIS_ST<- readRDS(file = Processed_DCIS_ST_Path)
+DCIS_ST@meta.data = DCIS_ST@meta.data [,1:8]
+rownames(DCIS_ST@meta.data) = DCIS_ST@meta.data$spot_id
+# Perform label transfer
+DCIS_anchors <- FindTransferAnchors(reference = DCIS_SC, query = DCIS_ST)
+# Transfer data and assign predictions
+DCIS_predictions.assay <- TransferData(anchorset = DCIS_anchors, 
+                                       refdata = DCIS_SC$cell_type, 
+                                       prediction.assay = TRUE,
+                                       weight.reduction = DCIS_ST[["pca"]], 
+                                       dims = 1:30)
+DCIS_ST[["predictions"]] <- DCIS_predictions.assay
+DefaultAssay(DCIS_ST) <- "predictions"
+
+```
+
+
+```{r, eval=FALSE, class.source='klippy', message=FALSE, warning=FALSE}
+# Check the updated object
+DCIS_ST@assays$predictions@data[,1:3]
+
+```
+
+**Columns:** Each column represents a single cell in your dataset.
+The column names (e.g., AAACAAGTATCTCCCA-1) are cell barcodes, which uniquely identify each cell.
+<br /> **Rows:**  Each row represents a different predicted cell type.
+The row names (e.g., NK/T, Clone2, Clone1, etc.) are the predicted cell types.
+The max row contains the highest prediction score for each cell across all cell types.
+<br /> **Values:** Each value in the matrix is a probability or score indicating how likely it is that a particular cell belongs to a specific cell type.
+<br /> For example, in the cell AAACAAGTATCTCCCA-1, the probability of being Clone1 is 0.69521410, and this is the highest probability for this cell, as indicated by the max row.
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=15, fig.height=6}
+# Visualize cancer cells spatially
+plot1 <- SpatialFeaturePlot(DCIS_ST, features = c("Clone1", "Clone2", "Clone3"), 
+                         pt.size.factor = 1, ncol = 3, crop = FALSE)
+plot1
+```
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE,fig.width=15, fig.height=6}
+## Then we can visualize other cell types spatially.
+plot1 <- SpatialFeaturePlot(DCIS_ST, features = c("Fibroblast", "EndoVas"), 
+                   pt.size.factor = 1, ncol = 2, crop = F)
+plot1
+```
+
+## CellTrek analysis
+
+CellTrek, developed in **Dr. Navin's lab**, is a computational tool designed to spatially resolve single-cell RNA sequencing (scRNA-seq) data. It enhances the spatial mapping of scRNA-seq data, providing a more detailed understanding of cellular organization within tissues. It allows researchers to map scRNA-seq data onto spatial transcriptomics data, thereby providing a more detailed and spatially informed understanding of cellular organization within tissues. By leveraging spatial and transcriptomic information, CellTrek enhances the ability to study tissue architecture, cell-cell interactions, and the spatial distribution of different cell types within a given tissue sample. This integration of spatial and single-cell data helps in uncovering new biological insights that are not apparent from either data type alone.
+
+### Single cell projection
+
+Major steps for Single cell projection analysis:
+
+**Step 1:** We first co-embed scRNA-seq and ST data. **(Output for step 1 was saved as 'DCIS_traint.rds')**. 
+Co-embedding is a technique commonly used in single-cell data analysis to integrate multiple datasets into a shared low-dimensional space. This approach allows researchers to compare and contrast different datasets by visualizing them together.
+
+**Step 2:** After co-embedding the two datasets, we can chart each single cell to the spatial positions by running the main function of CellTrek. Since this step takes quite a long time (\~35 mins) to run on a regular PC, you can just load the data which we have already run. **(Output for step 2 was saved as 'DCIS_celltrek.rds')**.
+<br /> For more information about the toolkit, visit the [CellTrek GitHub](https://github.com/navinlabcode/CellTrek).
+
+```{r, eval=FALSE, class.source='klippy', message=FALSE, warning=FALSE}
+# Step 1
+DCIS_traint <- CellTrek::traint(st_data=DCIS_ST, sc_data=DCIS_SC, 
+                                sc_assay='RNA', cell_names='cell_type')
+saveRDS(DCIS_traint, file = DCIS_traint_Path)
+
+# Step 2
+DCIS_celltrek <- CellTrek::celltrek(st_sc_int=DCIS_traint, int_assay='traint', sc_data=DCIS_SC,  
+                                   sc_assay = 'RNA', reduction='pca', intp=T, intp_pnt=10000,   
+                                   intp_lin=F, nPCs=30, ntree=1000, dist_thresh=0.4, top_spot=5,  
+                                   spot_n=5, repel_r=8, repel_iter=10, keep_model=T)$celltrek
+saveRDS(DCIS_celltrek, file = DCIS_celltrek_Path)
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE}
+# Option 2: load outpot for step 1
+DCIS_traint <- readRDS(file = DCIS_traint_Path)
+# Option 2: load outpot for step 2
+DCIS_celltrek <- readRDS(DCIS_celltrek_Path)
+```
+
+
+```{r, class.source='klippy', message=FALSE, warning=FALSE, fig.width=10, fig.height=4 }
+# Check the 
+p1 <- DimPlot(DCIS_traint, group.by = "type")
+p2 <- DimPlot(DCIS_traint, group.by = "cell_type", label = T)
+p1|p2
+```
+
+
+### Visualize celltrek results
+
+This function call will open a Shiny interface where you can interact with the data In the Shiny interface, set the following parameters: Color: cell_type Type: Categorical Shape: None Click 'Plot' to visualize the results.
+
+```{r, eval=FALSE, class.source='klippy', message=FALSE, warning=FALSE}
+DCIS_celltrek$cell_type <- factor(DCIS_celltrek$cell_type, levels=sort(unique(DCIS_celltrek$cell_type)))
+CellTrek::celltrek_vis(DCIS_celltrek@meta.data %>% dplyr::select(coord_x, coord_y, cell_type:id_new),
+                       DCIS_celltrek@images$slice1@image, 
+                       DCIS_celltrek@images$slice1@scale.factors$lowres)
+```
+
+![](/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/VISIUM_ST/VISIUM_Plot/Shiny_plot1.png)
+
+
+
+### Spatial proximity analysis
+
+Based on the CellTrek result, we can summarize the colocalization patterns between different cell types using **scoloc** module. Futhermore, we can use spatial graph to summarize how different cell types/states are colocalized spatially using the scoloc function. The scoloc function offers different methods for calculating colocalization. 
+
+In this example, we use the **'DT'** (Delaunay Triangulation) method. You can experiment with other methods as described in the CellTrek documentation.
+
+```{r, eval=FALSE, class.source='klippy', message=FALSE, warning=FALSE}
+# Feel free to try different methods in `scoloc`
+# The `scoloc` function identifies colocalization patterns between different cell types based on their spatial distribution.
+DCIS_celltrek_coloc <- CellTrek::scoloc(DCIS_celltrek, col_cell='cell_type', use_method='DT') 
+
+# Extract the colocalization results (including cell types and their frequencies)
+DCIS_celltrek_coloc_mst_cons <- DCIS_celltrek_coloc$mst_cons
+
+## We then extract the metadata (including cell types and their frequencies)
+DCIS_cell_class <- DCIS_celltrek@meta.data %>% dplyr::select(id=cell_type) %>% unique
+```
+
+### Visualize scoloc_vis results
+Visualize the colocalization patterns using `scoloc_vis`. The `scoloc_vis` function generates a spatial graph that shows how different cell types are colocalized. <br> Each node represents a cell type, and edges between nodes indicate colocalization relationships. <br> The thickness of the edges reflects the strength of colocalization. <br> The color and size of the nodes can represent additional metadata, such as cell type or frequency.
+
+```{r, eval=FALSE, class.source='klippy', message=FALSE, warning=FALSE}
+CellTrek::scoloc_vis(DCIS_celltrek_coloc_mst_cons, meta_data=DCIS_cell_class)
+```
+
+![](/volumes/USR1/pingxu/CSHL_course_2024_Summer/Spatial_transcriptomics/VISIUM_ST/VISIUM_Plot/Shiny_plot2.png)
+
+```{r session-info}
+sessionInfo()
+```
