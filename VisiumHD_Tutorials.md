@@ -1,18 +1,90 @@
-# Introduction to VisiumHD
-?
+# Visium HD Spatial Gene Expression (10x Genomics)
+
+The **Visium HD Spatial Gene Expression** platform offers **whole-transcriptome** spatial profiling at **single-cell resolution**. 
+Below is a concise summary of the key features and benefits.
+
+![image](https://github.com/user-attachments/assets/944b8fe5-cd87-41c7-8c6a-98fed89b6691)
+
+## Key Features
+
+![image](https://github.com/user-attachments/assets/ae2c2ddf-0a5d-457d-86f4-6b1062dea681)
+
+- **High-Resolution Capture**
+  - Slides contain two 6.5 x 6.5 mm capture areas.
+  - Each area includes **millions of contiguous 2 x 2 µm barcoded squares**.
+  - Enables **single-cell–scale** spatial resolution.
+
+- **Broad Sample Compatibility**
+  - Supports **human and mouse** tissue.
+  - Compatible with:
+    - Fresh frozen
+    - Fixed frozen
+    - FFPE sections
+    - Archived blocks and pre-sectioned slides
+
+- **CytAssist Workflow Integration**
+  - Uses the **Visium CytAssist** instrument.
+  - Transfers transcriptomic probes from standard slides to Visium HD slides.
+  - Streamlines sample preparation and improves precision.
+
+- **Enhanced Data Analysis**
+  - Spatial gene expression data at **2 µm resolution**.
+  - **Recommended binning:** 8 x 8 µm for analysis.
+  - Compatible with:
+    - **Space Ranger**
+    - **Loupe Browser**
+
+## Applications
+
+- Spatially resolved transcriptomics at **single-cell resolution**.
+- Analyze **cell identity**, **function**, and **tissue architecture**.
+- Ideal for research in **cancer**, **neuroscience**, and **developmental biology**.
+
+> Learn more at: [10x Genomics Visium HD](https://www.10xgenomics.com/products/visium-hd-spatial-gene-expression)
+
 
 ## the difference of VisiumHD and Visium
-?
 
-2um resolution is subcellular
+![image](https://github.com/user-attachments/assets/991c5d21-71b2-49a4-a20e-165cbe280058)
 
-<img width="371" alt="image" src="https://github.com/user-attachments/assets/17f3f711-3a47-4cf1-a8f4-e5e62ea659bb" />
 
-## how to choose the right bin size
+###  Visium HD vs Visium
 
-?
-![image](https://github.com/user-attachments/assets/29d73e75-14d7-4105-ac67-7042e2aa2d96)
+| Feature               | Visium HD                                         | Visium (Standard)                              |
+|-----------------------|--------------------------------------------------|------------------------------------------------|
+| **Spatial Resolution**| 2 × 2 µm barcoded squares (~10 million features) | 55 µm diameter spots (~5,000 features)         |
+| **Sample Types**      | FFPE, fresh frozen, fixed frozen                 | Fresh frozen (v1), FFPE (v2 with CytAssist)    |
+| **Data Analysis**     | High-resolution, single-cell level               | Lower resolution, may need scRNA-seq integration |
 
+
+## Choosing the Right Bin Size in Visium HD: Implications from Human Cell Size
+
+![image](https://github.com/user-attachments/assets/783d3648-9780-4532-b4d2-ba5e366f72e1)
+
+Human cell sizes vary widely across tissues and cell types—from small red blood cells (~6–8 µm) to large adipocytes or neurons (50–100+ µm). 
+Visium HD provides raw data start at **2 × 2 µm** resolution, allowing users to flexibly define bin sizes during analysis.
+
+####  Why Bin Size Matters
+
+The bin size determines how raw 2 µm pixel data are aggregated spatially. Choosing the appropriate bin size impacts:
+
+- **Signal strength**: Larger bins capture more transcripts (UMIs), reducing sparsity.
+- **Cell boundary resolution**: Smaller bins preserve spatial detail but may increase data dropout.
+
+>  **Smaller bins** often have **lower total UMI counts (`nCount`)** and **fewer detected genes (`nFeature`)**, which can pose challenges for clustering, normalization, and downstream statistical power.
+
+####  Best Practices
+
+- Use **8 × 8 µm** binning for most human tissues to balance resolution and data quality.
+- Use **exploratory binning** at multiple scales (e.g. 8 µm, 16 µm) to assess resolution vs. noise trade-off.
+- Align bin size with known **cell morphology** and **tissue architecture**.
+- Consider **downstream filtering thresholds** and **quality control**—small bins may require more stringent preprocessing or imputation.
+- Use segmentation tools like:
+  - **[StarDist](https://github.com/stardist/stardist)** – for accurate **nuclear segmentation** from DAPI or H&E images.
+  - **[bin2cell](https://github.com/LieberInstitute/bin2cell)** – to assign spatial bins to cells using segmentation-informed boundaries.
+
+
+# Quick prep before we dive in!!
 
 ## Data Downloads
 
@@ -44,7 +116,7 @@ Always the easiest and first step to understand your sample with XXXX_web_summar
 ![image](https://github.com/user-attachments/assets/2c8b6554-0667-4011-88dc-b7680edbd902)
 
 
-## That's get started!
+# Let’s dive in !!
 
 ### loading R packages
 
